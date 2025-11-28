@@ -1,0 +1,153 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# -----------------------------
+# Inputs
+# -----------------------------
+
+# Industry names
+industries = ['Smoke', 'Toys', 'Fun', 'LabEq', 'Paper',
+              'Boxes', 'Trans', 'Rtail', 'Meals', 'Banks']
+
+# Log monthly returns (in decimal form)
+log_monthly_returns = np.array([
+    0.00942806,
+    0.0000997608,
+    0.013066765,
+    0.010780167,
+    0.002216629,
+    0.006319777,
+    0.007730679,
+    0.011876759,
+    0.009316685,
+    0.010272197
+])
+
+# Log monthly standard deviations
+log_monthly_sd = np.array([
+    0.058998313,
+    0.082238404,
+    0.080368413,
+    0.056432589,
+    0.05101655,
+    0.054065676,
+    0.063010767,
+    0.052277648,
+    0.051375968,
+    0.065568469
+])
+
+# Covariance matrix (10x10)
+covariance_matrix = np.array([
+    [0.003460798, 0.001552594, 0.00107494 , 0.00082187 , 0.001677294, 0.001247792, 0.001504043, 0.000553212, 0.001055906, 0.001625485],
+    [0.001552594, 0.006629963, 0.003609612, 0.00286879 , 0.002307396, 0.002556002, 0.003399226, 0.002600507, 0.002564953, 0.00326025 ],
+    [0.00107494 , 0.003609612, 0.006303099, 0.002604745, 0.001914889, 0.00234216 , 0.003345403, 0.003022587, 0.002464577, 0.00331042 ],
+    [0.00082187 , 0.00286879 , 0.002604745, 0.003201659, 0.002044626, 0.002207455, 0.002440733, 0.002287619, 0.001837184, 0.002190805],
+    [0.001677294, 0.002307396, 0.001914889, 0.002044626, 0.002578422, 0.002055799, 0.0023526  , 0.001612409, 0.001744065, 0.00224178 ],
+    [0.001247792, 0.002556002, 0.00234216 , 0.002207455, 0.002055799, 0.002921169, 0.002581977, 0.00180613 , 0.001776117, 0.002456193],
+    [0.001504043, 0.003399226, 0.003345403, 0.002440733, 0.0023526  , 0.002581977, 0.003946009, 0.002365647, 0.002496967, 0.00330214 ],
+    [0.000553212, 0.002600507, 0.003022587, 0.002287619, 0.001612409, 0.00180613 , 0.002365647, 0.002807646, 0.001851527, 0.002062065],
+    [0.001055906, 0.002564953, 0.002464577, 0.001837184, 0.001744065, 0.001776117, 0.002496967, 0.001851527, 0.002610034, 0.002331883],
+    [0.001625485, 0.00326025 , 0.00331042 , 0.002190805, 0.00224178 , 0.002456193, 0.00330214 , 0.002062065, 0.002331883, 0.004220985]
+])
+
+# High Risk Portfolio weightings 
+
+
+high_risk_weighting = np.array([
+    0.1187,    # Smoke
+    0.0017,    # Toys
+    0.0396,    # Fun
+    0.40,      # LabEq
+    0.0425,    # Paper
+   -0.0492,    # Boxes
+    0.2929,    # Trans
+    0.1369,    # Rtail
+   -0.1332,    # Meals
+    0.1501     # Banks
+])
+
+# -----------------------------
+# Simulation settings
+# -----------------------------
+initial_investment = 100
+years = 5
+months = years * 12
+iterations = 10000
+
+
+def simulate_rebalancing(initial_weights):
+    monthly_rebalance_returns = []
+    annual_rebalance_returns = []
+    no_rebalance_returns = []
+
+    def simulate_monthly_returns():
+        # Draw correlated log-returns and convert to simple returns
+        return np.exp(
+            np.random.multivariate_normal(log_monthly_returns, covariance_matrix)
+        ) - 1
+
+    for _ in range(iterations):
+        pv_monthly = pv_annual = pv_no_rebal = initial_investment
+        weights_no_rebal = initial_weights.copy()
+        weights_annual = initial_weights.copy()
+
+        for month in range(months):
+            returns = simulate_monthly_returns()
+
+            # Monthly rebalance
+            pr_monthly = np.dot(initial_weights, returns)
+            pv_monthly *= (1 + pr_monthly)
+
+            # Annual rebalance
+            if month % 12 == 0 and month != 0:
+                weights_annual = initial_weights.copy()
+            pr_annual = np.dot(weights_annual, returns)
+            pv_annual *= (1 + pr_annual)
+            weights_annual *= (1 + returns)
+            weights_annual /= weights_annual.sum()
+
+            # No rebalancing
+            pr_no_rebal = np.dot(weights_no_rebal, returns)
+            pv_no_rebal *= (1 + pr_no_rebal)
+            weights_no_rebal *= (1 + returns)
+            weights_no_rebal /= weights_no_rebal.sum()
+
+        monthly_rebalance_returns.append(pv_monthly)
+        annual_rebalance_returns.append(pv_annual)
+        no_rebalance_returns.append(pv_no_rebal)
+
+    results_df = pd.DataFrame({
+        'Monthly Rebalance': monthly_rebalance_returns,
+        'Annual Rebalance': annual_rebalance_returns,
+        'No Rebalance': no_rebalance_returns
+    })
+
+    summary_stats = results_df.describe()
+    percentiles = results_df.quantile([0.05, 0.10, 0.90, 0.95])
+    prob_loss = (results_df < initial_investment).mean()
+
+    plt.figure(figsize=(12, 8))
+    sns.histplot(results_df['Monthly Rebalance'], label='Monthly Rebalance', kde=True)
+    sns.histplot(results_df['Annual Rebalance'], label='Annual Rebalance', kde=True)
+    sns.histplot(results_df['No Rebalance'], label='No Rebalance', kde=True)
+    plt.xlabel("Final Portfolio Value ($)")
+    plt.ylabel("Frequency")
+    plt.title("Distribution of Final Portfolio Value After 5 Years\n(10,000 Simulations per Strategy)")
+    plt.legend()
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.show()
+
+    print("Summary Statistics for Final Portfolio Value After 5 Years:")
+    print(summary_stats)
+    print("\nPercentiles for Final Portfolio Value After 5 Years:")
+    print(percentiles)
+    print("\nProbability of Ending Below Initial Investment:")
+    print(prob_loss)
+
+
+# Run simulation
+print("\nHigh-Risk Weighting Simulation:")
+simulate_rebalancing(high_risk_weighting)
